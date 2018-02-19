@@ -162,8 +162,17 @@ func NewSeedWithErrorChecking(mnemonic string, password string) ([]byte, error) 
 
 // NewSeed creates a hashed seed output given a provided string and password.
 // No checking is performed to validate that the string provided is a valid mnemonic.
-func NewSeed(mnemonic string, password string) []byte {
-	return pbkdf2.Key([]byte(mnemonic), []byte("mnemonic"+password), 2048, 64, sha512.New)
+func NewSeed(mnemonic, salt []byte) []byte {
+	salt = append([]byte("mnemonic"), salt[:]...)
+	return NewCustomSeed(mnemonic, salt, 2048, 64)
+}
+
+// NewCustomSeed  Creates a new key generation seed with given size
+// from mnemonic, salt and amount of derivation iterations to perform.
+// NewSeed creates a hashed seed output given a provided string and password.
+// No checking is performed to validate that the string provided is a valid mnemonic.
+func NewCustomSeed(mnemonic, salt []byte, iter, size int) []byte {
+	return pbkdf2.Key(mnemonic, salt, iter, size, sha512.New)
 }
 
 // Appends to data the first (len(data) / 32)bits of the result of sha256(data)
