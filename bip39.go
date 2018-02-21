@@ -152,12 +152,12 @@ func MnemonicToByteArray(mnemonic string) ([]byte, error) {
 
 // NewSeedWithErrorChecking creates a hashed seed output given the mnemonic string and a password.
 // An error is returned if the mnemonic is not convertible to a byte array.
-func NewSeedWithErrorChecking(mnemonic string, password string) ([]byte, error) {
+func NewSeedWithErrorChecking(mnemonic, password string) ([]byte, error) {
 	_, err := MnemonicToByteArray(mnemonic)
 	if err != nil {
 		return nil, err
 	}
-	return NewSeed(mnemonic, password), nil
+	return NewSeed([]byte(mnemonic), []byte(password)), nil
 }
 
 // NewSeed creates a hashed seed output given a provided string and password.
