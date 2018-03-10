@@ -1,6 +1,7 @@
 # go-bip39
 
 [![GoDoc](https://godoc.org/github.com/ipfn/go-bip39?status.svg)](https://godoc.org/github.com/ipfn/go-bip39)
+[![Travis-ci Build Status](https://travis-ci.org/ipfn/go-bip39.svg?branch=master)](https://travis-ci.org/ipfn/go-bip39)
 
 A golang implementation of the BIP0039 spec for mnemonic seeds
 
