@@ -1,3 +1,27 @@
+// The MIT License (MIT)
+//
+// Copyright © 2014 Tyler Smith.
+// Copyright © 2017-2018 The IPFN Developers. All Rights Reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// Package bip39 implements BIP0039 spec for mnemonic seeds.
 package bip39
 
 import (
@@ -32,6 +56,41 @@ func NewEntropy(bitSize int) ([]byte, error) {
 	entropy := make([]byte, bitSize/8)
 	_, err = rand.Read(entropy)
 	return entropy, err
+}
+
+// NewDefaultEntropy will create random entropy bytes of size 32 bits.
+func NewDefaultEntropy() ([]byte, error) {
+	return NewEntropy(32)
+}
+
+// NewSeedWithErrorChecking creates a hashed seed output given the mnemonic string and a password.
+// An error is returned if the mnemonic is not convertible to a byte array.
+func NewSeedWithErrorChecking(mnemonic, password string) ([]byte, error) {
+	_, err := MnemonicToByteArray(mnemonic)
+	if err != nil {
+		return nil, err
+	}
+	return NewSeed([]byte(mnemonic), []byte(password)), nil
+}
+
+// NewSeed creates a hashed seed output given a provided string and password.
+// No checking is performed to validate that the string provided is a valid mnemonic.
+func NewSeed(mnemonic, salt []byte) []byte {
+	salt = append([]byte("mnemonic"), salt[:]...)
+	return NewCustomSeed(mnemonic, salt, 2048, 64)
+}
+
+// NewSeedFromString creates a new hashed seed from string. See NewSeed.
+func NewSeedFromString(mnemonic, salt string) []byte {
+	return NewSeed([]byte(mnemonic), []byte(salt))
+}
+
+// NewCustomSeed  Creates a new key generation seed with given size
+// from mnemonic, salt and amount of derivation iterations to perform.
+// NewSeed creates a hashed seed output given a provided string and password.
+// No checking is performed to validate that the string provided is a valid mnemonic.
+func NewCustomSeed(mnemonic, salt []byte, iter, size int) []byte {
+	return pbkdf2.Key(mnemonic, salt, iter, size, sha512.New)
 }
 
 // NewMnemonic will return a string consisting of the mnemonic words for
@@ -150,29 +209,29 @@ func MnemonicToByteArray(mnemonic string) ([]byte, error) {
 	return hex, nil
 }
 
-// NewSeedWithErrorChecking creates a hashed seed output given the mnemonic string and a password.
-// An error is returned if the mnemonic is not convertible to a byte array.
-func NewSeedWithErrorChecking(mnemonic, password string) ([]byte, error) {
-	_, err := MnemonicToByteArray(mnemonic)
-	if err != nil {
-		return nil, err
+// IsMnemonicValid attempts to verify that the provided mnemonic is valid.
+// Validity is determined by both the number of words being appropriate,
+// and that all the words in the mnemonic are present in the word list.
+func IsMnemonicValid(mnemonic string) bool {
+	// Create a list of all the words in the mnemonic sentence
+	words := strings.Fields(mnemonic)
+
+	//Get num of words
+	numOfWords := len(words)
+
+	// The number of words should be 12, 15, 18, 21 or 24
+	if numOfWords%3 != 0 || numOfWords < 12 || numOfWords > 24 {
+		return false
 	}
-	return NewSeed([]byte(mnemonic), []byte(password)), nil
-}
 
-// NewSeed creates a hashed seed output given a provided string and password.
-// No checking is performed to validate that the string provided is a valid mnemonic.
-func NewSeed(mnemonic, salt []byte) []byte {
-	salt = append([]byte("mnemonic"), salt[:]...)
-	return NewCustomSeed(mnemonic, salt, 2048, 64)
-}
+	// Check if all words belong in the wordlist
+	for i := 0; i < numOfWords; i++ {
+		if !contains(WordList, words[i]) {
+			return false
+		}
+	}
 
-// NewCustomSeed  Creates a new key generation seed with given size
-// from mnemonic, salt and amount of derivation iterations to perform.
-// NewSeed creates a hashed seed output given a provided string and password.
-// No checking is performed to validate that the string provided is a valid mnemonic.
-func NewCustomSeed(mnemonic, salt []byte, iter, size int) []byte {
-	return pbkdf2.Key(mnemonic, salt, iter, size, sha512.New)
+	return true
 }
 
 // Appends to data the first (len(data) / 32)bits of the result of sha256(data)
@@ -204,55 +263,30 @@ func addChecksum(data []byte) []byte {
 	return dataBigInt.Bytes()
 }
 
-func padByteSlice(slice []byte, length int) []byte {
-	newSlice := make([]byte, length-len(slice))
-	return append(newSlice, slice...)
+func contains(list []string, value string) bool {
+	for _, v := range list {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
 
-func validateEntropyBitSize(bitSize int) error {
-	if (bitSize%32) != 0 || bitSize < 128 || bitSize > 256 {
+func padByteSlice(slice []byte, length int) []byte {
+	res := make([]byte, length-len(slice))
+	return append(res, slice...)
+}
+
+func validateEntropyBitSize(size int) error {
+	if (size%32) != 0 || size < 128 || size > 256 {
 		return errors.New("Entropy length must be [128, 256] and a multiple of 32")
 	}
 	return nil
 }
 
-func validateEntropyWithChecksumBitSize(bitSize int) error {
-	if (bitSize != 128+4) && (bitSize != 160+5) && (bitSize != 192+6) && (bitSize != 224+7) && (bitSize != 256+8) {
-		return fmt.Errorf("Wrong entropy + checksum size - expected %v, got %v", int((bitSize-bitSize%32)+(bitSize-bitSize%32)/32), bitSize)
+func validateEntropyWithChecksumBitSize(size int) error {
+	if (size != 128+4) && (size != 160+5) && (size != 192+6) && (size != 224+7) && (size != 256+8) {
+		return fmt.Errorf("Wrong entropy + checksum size - expected %v, got %v", int((size-size%32)+(size-size%32)/32), size)
 	}
 	return nil
-}
-
-// IsMnemonicValid attempts to verify that the provided mnemonic is valid.
-// Validity is determined by both the number of words being appropriate,
-// and that all the words in the mnemonic are present in the word list.
-func IsMnemonicValid(mnemonic string) bool {
-	// Create a list of all the words in the mnemonic sentence
-	words := strings.Fields(mnemonic)
-
-	//Get num of words
-	numOfWords := len(words)
-
-	// The number of words should be 12, 15, 18, 21 or 24
-	if numOfWords%3 != 0 || numOfWords < 12 || numOfWords > 24 {
-		return false
-	}
-
-	// Check if all words belong in the wordlist
-	for i := 0; i < numOfWords; i++ {
-		if !contains(WordList, words[i]) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
 }
